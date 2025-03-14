@@ -4,6 +4,9 @@
 library(readODS)
 library(readxl)
 library(tidyr)
+library(lme4)
+library(lmerTest)
+library(ggplot2)
 
 # ==== FUNCTIONS ====
 
@@ -241,7 +244,53 @@ for(dat_fr in df_long_list){
 setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
 write.csv(master_df,file='master_df.csv',row.names=FALSE)
 
-# ==== analysis 1 ====
+# ==== visualizations ====
 
+# read in data
 setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
 master_df <- read.csv('master_df_TEST.csv')
+
+ggplot(master_df, aes(x = time, y = MeanThickness_thickness_global, fill = FHR)) +
+  geom_violin(trim = FALSE) +   
+  scale_fill_brewer(palette = "Set3") +  
+  labs(x = "Time", y = "Value", fill = "Group") +   
+  theme_minimal()
+
+# ==== analysis 1 ====
+
+# read in data
+setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
+master_df <- read.csv('master_df_TEST.csv')
+
+# exclude sibling pairs??? ***
+
+# !!!! Create false variable for testing statistical model !!!!
+
+master_df$FHR_SHUFFLE <- sample(master_df$FHR)
+table(master_df$FHR_SHUFFLE, master_df$FHR)
+
+# analysis
+# clean a little
+master_df$sex_str[master_df$sex_str=="male"] <- 'M'
+master_df$sex_str[master_df$sex_str=="female"] <- 'F'
+# make sure variables are correct classes
+master_df$sex <- as.factor(master_df$sex)
+master_df$FHR <- as.factor(master_df$FHR)
+master_df$FHR_SHUFFLE <- as.factor(master_df$FHR_SHUFFLE) # the false variable !
+# change the reference to PBC (if desired)
+master_df$FHR <- relevel(master_df$FHR, ref = "3")
+master_df$FHR_SHUFFLE <- relevel(master_df$FHR_SHUFFLE, ref = "3") # the false variable !
+
+# linear mixed effects model with random intercept
+model <- lmer(BrainSegVolNotVent ~ time*FHR_SHUFFLE + age + sex_str + site +
+                mean_eulnum_cross + (1 | sub_id), data = master_df)
+summary(model)
+
+
+
+# ==== end
+
+
+
+
+
