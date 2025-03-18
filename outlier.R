@@ -6,6 +6,7 @@ library(readODS)
 library(readxl)
 library(tidyr)
 library(ggplot2)
+library(dplyr)
 
 # ==== reading in data ====
 
@@ -590,6 +591,17 @@ print(paste('Subjects with at least 1 outlier: ',i,sep=""))
 
 ## temporary workspace here. Save outlier data from alternative approaches
 
+# just thickness
+colnames(outlier_flags_longi)
+outlier_flags_longi_area <- outlier_flags_longi[,c(1:69)]
+outlier_flags_longi_thickness <- outlier_flags_longi[,c(1,70:137)]
+outlier_flags_longi_volume <- outlier_flags_longi[,c(1,138:205)]
+
+# subs to check for thickness: 244 ses01, 449 ses01
+rowSums(outlier_flags_longi_thickness[,-1])[outlier_flags_longi_thickness$sub_id==244] # only 2
+rowSums(outlier_flags_longi_thickness[,-1])[outlier_flags_longi_thickness$sub_id==244] # 
+
+
 # determine top X%
 outlier_df_longi$highlight <- 0
 outlier_df_longi$highlight[which(outlier_df_longi$outlier_means >= quantile(outlier_df_longi$outlier_means, 0.90))] <- 1
@@ -671,19 +683,58 @@ outlier_df_longi$highlight_4[outlier_df_longi$sub_id %in% c()] <- 1
 
 # ==== euler ====
 
+# read in euler data
 setwd('/mnt/projects/VIA_BIDS/BIDS_VIA11-15_derivatives/stat_tables/ANALYSIS_CORTICAL/')
 fs_qa_dat <- read.csv('VIA11-15_fs741_long_qa_measures_restructured.csv')
 fs_qa_dat <- fs_qa_dat[fs_qa_dat$famlbnr %in% sublist$sub_id,]
 fs_qa_dat <- fs_qa_dat[order(fs_qa_dat$famlbnr),]
-
 length(unique(fs_qa_dat$famlbnr))==length(unique(demos$famlbnr))
 
 # as of now, excluding for orig image quality and my personal qc
 # NOT excluding for outliers + enhanced inspection of internal/external qc
+# SO.... we NEED TO EXCLUDE THE STATISTICAL OUTLIERS
+# subs which are outliers to be excluded:
+# - 5 (ses01), 135 (ses01), 285 (ses01), 449 (ses01)
 
-hist(fs_qa_dat$mean_eulnum_cross)
-fs_qa_dat$mean_eulnum_outs <- get_outs(fs_qa_dat$mean_eulnum_cross)
-fs_qa_dat$famlbnr[fs_qa_dat$mean_eulnum_outs==1]
+euler_dat <- merge(fs_qa_dat, demos, by='famlbnr')
+
+subs_to_remove <- c(5,135,285,449)
+euler_dat <- euler_dat[!(euler_dat$session_id == "ses01" & euler_dat$famlbnr %in% subs_to_remove),]
+
+# regress out age, site, and sex, as before
+# select only necessary variables for this
+# and also correctly convert to long
+euler_dat <- euler_dat[,c(1,8,19,49,51,55,56,57)]
+colnames(euler_dat) <- c('sub_ID','time','eul_num','VIA11_site','VIA15_site',
+                         'sex','VIA11_age','VIA15_age')
+euler_dat <- euler_dat %>%
+  mutate(mri_age = case_when(
+    time == "ses01" ~ VIA11_age,
+    time == "ses02" ~ VIA15_age
+  ), mri_site = case_when(
+    time == "ses01" ~ VIA11_site,
+    time == "ses02" ~ VIA15_site
+  )) %>%
+  select(-VIA11_age, -VIA15_age, -VIA11_site, -VIA15_site)
+
+euler_dat$sex <- as.factor(euler_dat$sex)
+euler_dat$mri_site <- as.factor(euler_dat$mri_site)
+
+# set up model
+model_eul <- lm(sub_ID ~ mri_age + mri_site + sex, data = euler_dat)
+# get residual
+euler_dat$eul_resid <- rstandard(model_eul)
+# get outliers -- THREE SDs, different than before
+cutoff <- function(data, x) {
+  mean(data, na.rm = TRUE) + c(-1, 1) * x * sd(data, na.rm = TRUE) }
+x <- 2
+low <- cutoff(euler_dat$eul_resid,x)[1]
+high <- cutoff(euler_dat$eul_resid,x)[2]
+euler_dat$eul_outs <- as.numeric(euler_dat$eul_resid < low | euler_dat$eul_resid > high)
+# look at the outliers (what's their euler number? ... what's their sub ID and ses #?)
+euler_dat$eul_num[euler_dat$eul_outs==1]
+euler_dat$sub_ID[euler_dat$eul_outs==1]
+euler_dat$time[euler_dat$eul_outs==1]
 
 
 
