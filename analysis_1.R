@@ -138,13 +138,11 @@ sublist <- read_ods('sub_list.ods')
 # stat outliers -- based on internal primarily (base and long data)
 # euler outliers
 sublist <- sublist[sublist$image_incl==1,]
-sublist <- sublist[sublist$qc_incl==1,]
-sublist <- sublist[sublist$base_out_incl==1,]
-# sublist <- sublist[sublist$long_out_incl==1,]  # add this when sub exclusion finalized
-# sublist <- sublist[sublist$euler_incl ==1,]    # add this when sub exclusion finalized 
-
-
-# working in progress here
+sublist <- sublist[sublist$qc_incl=="1",]
+sublist <- sublist[sublist$base_out_incl=="1",]
+sublist <- sublist[sublist$long_out_incl!="0",]  
+sublist <- sublist[sublist$euler_incl=="1",]    
+sublist <- sublist[sublist$twin_pair_include=='1',]
 
 # report final subject list:
 sublist <- as.data.frame(sublist[,c(1,2)])
@@ -184,7 +182,7 @@ colnames(demos)
 # very important naming convention for each column
 colnames(demos) <- c('sub_id','age_T1','age_T2',
                      'site_T1','site_T2','sex_str',
-                     'sex','sib_pair','FHR_str','FHR',
+                     'sex','FHR_str','FHR',
                      'VIA11_adhd_lft','VIA11_any_dx_lft')
 demos_long <- as.data.frame(pivot_longer(demos, 
                     cols = c(age_T1, age_T2, site_T1, site_T2), 
@@ -211,14 +209,15 @@ for(f in list.files(pattern='_long_')) {
   
   if(read_file_or_not(f)) {
     temp_brain_dat <- read.csv(f)
-    temp_brain_dat <- temp_brain_dat[temp_brain_dat$famlbnr %in% sublist$sub_id,]
+    
+    temp_brain_dat$session_id[temp_brain_dat$session_id=='ses01'] <- 'T1'
+    temp_brain_dat$session_id[temp_brain_dat$session_id=='ses02'] <- 'T2'
+    temp_brain_dat$id_T <- paste(temp_brain_dat$famlbnr,temp_brain_dat$session_id,sep="_")
+    temp_brain_dat <- temp_brain_dat[temp_brain_dat$id_T %in% sublist$id_T,]
     temp_brain_dat <- temp_brain_dat[order(temp_brain_dat$famlbnr),]
     
     if(all(temp_brain_dat$famlbnr==sublist$sub_id)) {
       print('brain data sub ids match sublist ids')
-      
-      temp_brain_dat$session_id[temp_brain_dat$session_id=='ses01'] <- 'T1'
-      temp_brain_dat$session_id[temp_brain_dat$session_id=='ses02'] <- 'T2'
       if(all(temp_brain_dat$session_id==sublist$time)) {
           print('brain data TIME matches sublist time, proceeding...')
         
@@ -302,7 +301,7 @@ for(dat_fr in df_long_list){
 # IF YOU WANT
 # write the master df to your directory:
 setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
-write.csv(master_df,file='master_df.csv',row.names=FALSE)
+write.csv(master_df,file='master_df_2.csv',row.names=FALSE)
 
 # IF YOU ALREADY HAVE A STARTING POINT
 # read in data you already combined
