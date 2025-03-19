@@ -83,6 +83,48 @@ match_sub_time <- function(ref_df,new_df) {
       return(list(ref_df = ref_df, new_df = new_df))}
     } else {stop('Error: dfs do not match !')}}
 
+# ==== siblings ====
+
+# READ; NO NEED TO RUN THIS SECTION
+
+# this is how I created a df to find sub_ids who were siblings as well as who
+# they were matched to (i.e., who their sibling was). From there, I worked in
+# excel to determine which sibling to include -- based on, 1) is there 
+# longitudinal data for one and not the other? 2) does one have better image
+# quality ratings? and finally 3) if they're equal on 1 and 2, just use the 
+# sibling that came in first. 
+
+# The results of this work have been saved in sub_list.ods (see next section)
+# THEREFORE, NO NEED TO RUN THIS SECTION
+
+# read in complete list of subs
+setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1')
+sublist <- read_ods('sub_list.ods')
+sublist <- sublist[sublist$image_incl==1,]
+sublist <- sublist[sublist$qc_incl==1,]
+sublist <- sublist[sublist$base_out_incl==1,]
+
+# exclude sibling pairs ***
+# Go into allkey (can use from VIA11 project you were helping Kathrine on) use sib variables there
+# - Use the sib with more data
+# - how many actual sib pairs are included?
+data_path = "/mnt/projects/VIA11/FREESURFER/Stats/Data/VIA11_allkey_160621_FreeSurfer_pruned_20220509.csv"
+via11_data_csv <- read.table(data_path, header = TRUE, sep = ",", dec = ".")
+all(sublist$sub_id %in% via11_data_csv$famlbnr)
+
+# sib variables are:
+# Sib_ID_v11
+# Sib_pair_no_v11 - Use this one, pairs each sibling
+# Sibpair_v11
+sib_dat <- via11_data_csv[,c('famlbnr','Sib_pair_no_v11')]
+sib_dat <- sib_dat[sib_dat$famlbnr %in% sublist$sub_id,]
+all(unique(sib_dat$famlbnr) == unique(sublist$sub_id))
+
+x <- sib_dat$Sib_pair_no_v11
+included_pairs <- unique(x[duplicated(x) & !is.na(x)])
+sib_dat <- sib_dat[sib_dat$Sib_pair_no_v11 %in% included_pairs,]
+sib_dat <- sib_dat[order(sib_dat$famlbnr),]
+
 # ==== combining data; CREATE DF master_df.csv FOR ANALYSIS ==== 
 
 # read in complete list of subs
@@ -100,9 +142,15 @@ sublist <- sublist[sublist$qc_incl==1,]
 sublist <- sublist[sublist$base_out_incl==1,]
 # sublist <- sublist[sublist$long_out_incl==1,]  # add this when sub exclusion finalized
 # sublist <- sublist[sublist$euler_incl ==1,]    # add this when sub exclusion finalized 
+
+
+# working in progress here
+
+# report final subject list:
 sublist <- as.data.frame(sublist[,c(1,2)])
 rownames(sublist) <- NULL
 report(sublist)
+
 # compare these subs with data you read in, does it all match?
 
 # BASIC DEMOGRAPHICS
@@ -117,15 +165,14 @@ demos <- demos[demos$famlbnr %in% sublist$sub_id,]
 # ADD CONTROL VARIABLES HERE:   ... what else to control for? Psychotic-like experiences? Weight? Height?? Handedness? 
 imp_cols <- c('via11_mri_age','via15_mri_age',
               'via11_mri_site','via15_mri_site',
-              'sex_string','sex_code','sib_pair',
-              'fhr_group_string','fhr_group_code')
+              'sex_string','sex_code',
+              'fhr_group_string','fhr_group_code',
+              'KSADS_adhd_lft_v11','KSADS_any_diag_lft_v11')
 # cleaning variables (i.e., string "NA" should be actual NA; numbers should be numeric):
 for(imp_col in imp_cols){
   demos[[imp_col]] <- ifelse(demos[[imp_col]]=="NA",NA,demos[[imp_col]])
-  if(imp_col == 'via11_mri_age' | imp_col == 'via15_mri_age' |
-     imp_col == 'sib_pair'){
-    demos[[imp_col]] <- as.numeric(demos[[imp_col]]) 
-  }}
+  if(imp_col == 'via11_mri_age' | imp_col == 'via15_mri_age'){
+    demos[[imp_col]] <- as.numeric(demos[[imp_col]]) }}
 # get new df
 demos <- demos[,c("famlbnr",imp_cols)]
 # pivot from wide to long
@@ -137,7 +184,8 @@ colnames(demos)
 # very important naming convention for each column
 colnames(demos) <- c('sub_id','age_T1','age_T2',
                      'site_T1','site_T2','sex_str',
-                     'sex','sib_pair','FHR_str','FHR')
+                     'sex','sib_pair','FHR_str','FHR',
+                     'VIA11_adhd_lft','VIA11_any_dx_lft')
 demos_long <- as.data.frame(pivot_longer(demos, 
                     cols = c(age_T1, age_T2, site_T1, site_T2), 
                     names_to = c(".value", "time"),
@@ -222,12 +270,24 @@ df_list <- match_sub_time(sublist,fs_qa_long)
 sublist <- df_list$ref_df
 fs_qa_long <- df_list$new_df
 
+# VIA11 DENSITY
+setwd('/home/adamk/Desktop/VIA11_project/')
+ak <- read_xlsx('VIA11_allkey-091221_WB-MRI-20220329_MRI-QC_combi_20220427.xlsx')
+ak <- as.data.frame(ak[,c('famlbnr','REG_degurba_EU_v7')])
+# T1 and T2 are NOT true here. It's a fixed variable (for my sake here...)
+colnames(ak) <- c('sub_id','urb_T1')
+ak$urb_T2 <- ak$urb_T1
+ak <- as.data.frame(pivot_longer(ak, cols = c(urb_T1, urb_T2),names_to = c(".value", "time"),names_sep = "_"))
+# adjust and make dfs matching
+df_list <- match_sub_time(sublist,ak)
+sublist <- df_list$ref_df
+ak <- df_list$new_df
+colnames(ak)[3] <- 'VIA7_density'
+
 # CREATE MASTER DF FROM THE DFS YOU HAVE CREATED UP TO THIS POINT
-
+# IF YOU NEED TO DO FROM SCRATCH (i.e., NEW SUB EXCLUSION)
 master_df <- sublist[,c("sub_id","time")]
-
-df_long_list <- list(demos_long,brain_long,fs_qa_long)
-
+df_long_list <- list(demos_long,brain_long,fs_qa_long,ak)
 # select cols from the dfs you've created
 # sub_id and time are ALREADY in the master_df
 for(dat_fr in df_long_list){
@@ -239,10 +299,24 @@ for(dat_fr in df_long_list){
   if(length(selected_cols) == 1) {
     colnames(master_df)[ncol(master_df)] <- selected_cols }
 }
-
+# IF YOU WANT
 # write the master df to your directory:
 setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
 write.csv(master_df,file='master_df.csv',row.names=FALSE)
+
+# IF YOU ALREADY HAVE A STARTING POINT
+# read in data you already combined
+setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
+master_df <- read.csv('master_df_TEST.csv')
+if(all(master_df$id_T==ak$id_T)){
+  master_df$VIA11_urbanicity <- ak$VIA11_density }
+if(all(master_df$id_T==demos_long$id_T)){
+  master_df$VIA11_adhd_lft <- demos_long$VIA11_adhd_lft 
+  master_df$VIA11_any_dx_lft <- demos_long$VIA11_any_dx_lft }
+# IF YOU WANT:
+# write the master df to your directory
+setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
+write.csv(master_df,file='master_df_TEST.csv',row.names=FALSE)
 
 # ==== visualizations ====
 
@@ -262,7 +336,6 @@ ggplot(master_df, aes(x = time, y = MeanThickness_thickness_global, fill = FHR))
 setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
 master_df <- read.csv('master_df_TEST.csv')
 
-# exclude sibling pairs??? ***
 
 # !!!! Create false variable for testing statistical model !!!!
 
@@ -287,9 +360,7 @@ model <- lmer(BrainSegVolNotVent ~ time*FHR_SHUFFLE + age + sex_str + site +
 summary(model)
 
 
-
 # ==== end
-
 
 
 
