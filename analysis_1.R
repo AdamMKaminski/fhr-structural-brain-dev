@@ -7,6 +7,8 @@ library(tidyr)
 library(lme4)
 library(lmerTest)
 library(ggplot2)
+library(emmeans)
+library(dplyr)
 
 # ==== FUNCTIONS ====
 
@@ -329,10 +331,17 @@ write.csv(master_df,file='master_df_TEST.csv',row.names=FALSE)
 setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
 master_df <- read.csv('master_df.csv')
 
+# clean a little
+# # make sure variables are correct classes
 master_df$FHR <- as.factor(master_df$FHR)
 master_df$FHR <- relevel(master_df$FHR, ref = 3)
 master_df$FHR_str <- as.factor(master_df$FHR_str)
 master_df$FHR_str <- relevel(master_df$FHR_str, ref = "PBC")
+
+master_df$sex <- as.factor(master_df$sex)
+master_df$sex_str <- as.factor(master_df$sex_str)
+master_df$sex_str[master_df$sex_str=="male"] <- 'M'
+master_df$sex_str[master_df$sex_str=="female"] <- 'F'
 
 # ==== replications ====
 
@@ -347,42 +356,92 @@ master_df_T1 <- master_df[master_df$time=="T1",]
 
 # FHR-SZ males should show smaller BRAIN VOLUME than controls
 summary(lm(BrainSegVolNotVent ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
-temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='male'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='M'),]
 t.test(temp$BrainSegVolNotVent~temp$FHR_str) # yes, signif t-test
-temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='female'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='F'),]
 t.test(temp$BrainSegVolNotVent~temp$FHR_str) # yes, NOT a signif t-test
 
 # FHR-SZ males should show smaller CORTICAL VOLUME than controls
 summary(lm(eTIV ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
-temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='male'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='M'),]
 t.test(temp$eTIV~temp$FHR_str) # yes, signif t-test
-temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='female'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='F'),]
 t.test(temp$eTIV~temp$FHR_str) # yes, NOT a signif t-test
 
 # FHR-SZ males should show smaller SURFACE AREA than controls
 summary(lm(WhiteSurfArea_area_global ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
-temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='male'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='M'),]
 t.test(temp$WhiteSurfArea_area_global~temp$FHR_str) # yes, signif t-test
-temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='female'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='F'),]
 t.test(temp$WhiteSurfArea_area_global~temp$FHR_str) # yes, NOT a signif t-test
 
 # FHR-BP females should show larger BRAIN VOLUME than controls
 summary(lm(BrainSegVolNotVent ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
-temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='male'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='M'),]
 t.test(temp$BrainSegVolNotVent~temp$FHR_str) # yes, NOT a signif t-test
-temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='female'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='F'),]
 t.test(temp$BrainSegVolNotVent~temp$FHR_str) # yes but barely (p=0.047), signif t-test; in the paper I think it was weak too
 
 # FHR-BP females should show larger CORTICAL VOLUME than controls
 summary(lm(eTIV ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
-temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='male'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='M'),]
 t.test(temp$eTIV~temp$FHR_str) # yes, NOT a signif t-test
-temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='female'),]
+temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='F'),]
 t.test(temp$eTIV~temp$FHR_str) # not really... a marginal effect (p=0.07); in the paper I think it was weak too
 
 # should be no evidence for interaction effects for cortical thickness
 summary(lm(MeanThickness_thickness_global ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
 # yep, same finding, VERY much not signif...
+
+# ==== dataset characteristics ====
+
+table(master_df$time,master_df$FHR_str,master_df$sex_str)
+
+mean_age <- tapply(master_df$age, master_df$time, mean, na.rm = TRUE)
+sum_adhd <- tapply(master_df$VIA11_adhd_lft, master_df$time, sum, na.rm = TRUE)
+sum_t1_m <- sum(master_df$sex_str[master_df$time=='T1']=='M')
+sum_t1_f <- sum(master_df$sex_str[master_df$time=='T1']=='F')
+sum_t2_m <- sum(master_df$sex_str[master_df$time=='T2']=='M')
+sum_t2_f <- sum(master_df$sex_str[master_df$time=='T2']=='F')
+sum_t1_drcmr <- sum(master_df$site[master_df$time=='T1']=='DRCMR')
+sum_t1_cfin <- sum(master_df$site[master_df$time=='T1']=='CFIN')
+sum_t2_drcmr <- sum(master_df$site[master_df$time=='T2']=='DRCMR')
+sum_t2_cfin <- sum(master_df$site[master_df$time=='T2']=='CFIN')
+sum_t1_pbc <- sum(master_df$FHR_str[master_df$time=='T1']=='PBC')
+sum_t1_bp <- sum(master_df$FHR_str[master_df$time=='T1']=='BP')
+sum_t1_sz <- sum(master_df$FHR_str[master_df$time=='T1']=='SZ')
+sum_t2_pbc <- sum(master_df$FHR_str[master_df$time=='T2']=='PBC')
+sum_t2_bp <- sum(master_df$FHR_str[master_df$time=='T2']=='BP')
+sum_t2_sz <- sum(master_df$FHR_str[master_df$time=='T2']=='SZ')
+mean_eulnum <- tapply(master_df$mean_eulnum_cross, master_df$time, mean, na.rm = TRUE)
+mean_thick <- tapply(master_df$MeanThickness_thickness_global, master_df$time, mean, na.rm = TRUE)
+mean_brainvol <- tapply(master_df$BrainSegVolNotVent, master_df$time, mean, na.rm = TRUE)
+mean_corvol <- tapply(master_df$eTIV, master_df$time, mean, na.rm = TRUE)
+mean_area <- tapply(master_df$WhiteSurfArea_area_global, master_df$time, mean, na.rm = TRUE)
+
+cat(paste("\n","VIA11:","\n","Mean age: ",round(mean_age[1],1)," years","\n",
+          "Sex: ",sum_t1_m," M, ",sum_t1_f," F","\n",
+          "Group: ",sum_t1_pbc," PBC, ",sum_t1_bp," BP, ",sum_t1_sz," SZ","\n",
+          "Site; ",sum_t1_drcmr," DRCMR, ",sum_t1_cfin," CFIN","\n",
+          "Num ADHD: ",sum_adhd[1],"\n",
+          "Num any DX: ",sum_dx[1],"\n",
+          "Mean euler number: ",round(mean_eulnum[1],1),"\n",
+          "Mean cortical thickness: ",round(mean_thick[1],1),"\n",
+          "Mean brain volume: ",round(mean_brainvol[1],1),"\n",
+          "Mean cortex volume: ",round(mean_corvol[1],1),"\n",
+          "Mean surface area: ",round(mean_area[1],1),"\n","\n",
+          "VIA15:","\n",
+          "Mean age: ",round(mean_age[2],1)," years","\n",
+          "Sex: ",sum_t2_m," M, ",sum_t2_f," F","\n",
+          "Group: ",sum_t2_pbc," PBC, ",sum_t2_bp," BP, ",sum_t2_sz," SZ","\n",
+          "Site; ",sum_t2_drcmr," DRCMR, ",sum_t2_cfin," CFIN","\n",
+          "Num ADHD: ",sum_adhd[2],"\n",
+          "Num any DX: ",sum_dx[2],"\n",
+          "Mean euler number: ",round(mean_eulnum[2],1),"\n",
+          "Mean cortical thickness: ",round(mean_thick[2],1),"\n",
+          "Mean brain volume: ",round(mean_brainvol[2],1),"\n",
+          "Mean cortex volume: ",round(mean_corvol[2],1),"\n",
+          "Mean surface area: ",round(mean_area[2],1),sep=""))
 
 # ==== visualizations ====
 
@@ -393,37 +452,32 @@ ggplot(master_df, aes(x = time, y = eTIV, fill = FHR_str)) +
   labs(x = "Time", y = "eTIV", fill = "Group", color = "Group") +   
   theme_minimal()
 
+temp <- master_df[master_df$sex_str=='male',]
+ggplot(temp, aes(x = time, y = eTIV, fill = FHR_str)) +
+  geom_violin(trim = FALSE, position = position_dodge(0.8)) +   
+  scale_fill_brewer(palette = "Set3") +  
+  labs(x = "Time", y = "eTIV", fill = "Group", color = "Group") +   
+  theme_minimal()
+
 # ==== analysis 1 ====
 
-# read in data
-setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
-master_df <- read.csv('master_df_TEST.csv')
-
-
 # !!!! Create false variable for testing statistical model !!!!
-
-master_df$FHR_SHUFFLE <- sample(master_df$FHR)
+master_df$FHR_SHUFFLE <- sample(master_df$FHR_str)
+master_df$FHR_SHUFFLE <- as.factor(master_df$FHR_SHUFFLE) # the false variable !
+master_df$FHR_SHUFFLE <- relevel(master_df$FHR_SHUFFLE, ref = 'PBC') # the false variable !
 table(master_df$FHR_SHUFFLE, master_df$FHR)
 
 # analysis
-# clean a little
-master_df$sex_str[master_df$sex_str=="male"] <- 'M'
-master_df$sex_str[master_df$sex_str=="female"] <- 'F'
-# make sure variables are correct classes
-master_df$sex <- as.factor(master_df$sex)
-master_df$FHR <- as.factor(master_df$FHR)
-master_df$FHR_SHUFFLE <- as.factor(master_df$FHR_SHUFFLE) # the false variable !
-# change the reference to PBC (if desired)
-master_df$FHR <- relevel(master_df$FHR, ref = "3")
-master_df$FHR_SHUFFLE <- relevel(master_df$FHR_SHUFFLE, ref = "3") # the false variable !
-
 # linear mixed effects model with random intercept
-model <- lmer(BrainSegVolNotVent ~ time*FHR_SHUFFLE + age + sex_str + site +
+model <- lmer(BrainSegVolNotVent ~ time*FHR_SHUFFLE*sex_str + age + site +
                 mean_eulnum_cross + (1 | sub_id), data = master_df)
 summary(model)
-
+emmeans(model, pairwise ~ time | FHR_SHUFFLE * sex_str)
 
 # ==== end
+
+
+
 
 
 
