@@ -30,9 +30,15 @@ read_file_or_not <- function(file_name) {
 report <- function(sublist_df) {
   uniq_subs <- length(unique(sublist_df$sub_id))
   long_subs <- sum(duplicated(sublist_df$sub_id))
-  t1_subs <- sum(sublist_df$time[!duplicated(sublist_df$sub_id) & !duplicated(sublist_df$sub_id, fromLast = TRUE)]=="ses01")
-  t2_subs <- sum(sublist_df$time[!duplicated(sublist_df$sub_id) & !duplicated(sublist_df$sub_id, fromLast = TRUE)]=="ses02")
-  
+  if(all(c("T1","T2") %in% sublist_df$time)){
+    t1_subs <- sum(sublist_df$time[!duplicated(sublist_df$sub_id) & !duplicated(sublist_df$sub_id, fromLast = TRUE)]=="T1")
+    t2_subs <- sum(sublist_df$time[!duplicated(sublist_df$sub_id) & !duplicated(sublist_df$sub_id, fromLast = TRUE)]=="T2")
+  } else if(all(c("ses01","ses02") %in% sublist_df$time)){
+    t1_subs <- sum(sublist_df$time[!duplicated(sublist_df$sub_id) & !duplicated(sublist_df$sub_id, fromLast = TRUE)]=="ses01")
+    t2_subs <- sum(sublist_df$time[!duplicated(sublist_df$sub_id) & !duplicated(sublist_df$sub_id, fromLast = TRUE)]=="ses02")
+  } else {
+    return("something off in time col")
+  }
   return(cat('Total number of unique subjects: ',uniq_subs,
       '\nTotal number of subjects with long data (T1 and T2): ',long_subs,
       '\nTotal number of subjects with T1 data only: ',t1_subs,
@@ -140,7 +146,7 @@ sublist <- read_ods('sub_list.ods')
 sublist <- sublist[sublist$image_incl==1,]
 sublist <- sublist[sublist$qc_incl=="1",]
 sublist <- sublist[sublist$base_out_incl=="1",]
-sublist <- sublist[sublist$long_out_incl!="0",]  
+sublist <- sublist[sublist$long_out_incl!="0",]
 sublist <- sublist[sublist$euler_incl=="1",]    
 sublist <- sublist[sublist$twin_pair_include=='1',]
 
@@ -301,7 +307,7 @@ for(dat_fr in df_long_list){
 # IF YOU WANT
 # write the master df to your directory:
 setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
-write.csv(master_df,file='master_df_2.csv',row.names=FALSE)
+write.csv(master_df,file='master_df.csv',row.names=FALSE)
 
 # IF YOU ALREADY HAVE A STARTING POINT
 # read in data you already combined
@@ -317,16 +323,74 @@ if(all(master_df$id_T==demos_long$id_T)){
 setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
 write.csv(master_df,file='master_df_TEST.csv',row.names=FALSE)
 
-# ==== visualizations ====
+# ==== START - read in ====
 
 # read in data
 setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
-master_df <- read.csv('master_df_TEST.csv')
+master_df <- read.csv('master_df.csv')
 
-ggplot(master_df, aes(x = time, y = MeanThickness_thickness_global, fill = FHR)) +
-  geom_violin(trim = FALSE) +   
+master_df$FHR <- as.factor(master_df$FHR)
+master_df$FHR <- relevel(master_df$FHR, ref = 3)
+master_df$FHR_str <- as.factor(master_df$FHR_str)
+master_df$FHR_str <- relevel(master_df$FHR_str, ref = "PBC")
+
+# ==== replications ====
+
+# can you basically replicate previous VIA 11 results?
+# it's a different sample subset so wouldn't expect identical results
+# to replicate:
+# - group-by-sex interactions in brain volume, cortical volume, and surface area 
+# - FHR-SZ males - smaller volumes and surface area relative to male controls 
+# - FHR-BP females - larger brain and cortical volumes than female controls
+
+master_df_T1 <- master_df[master_df$time=="T1",]
+
+# FHR-SZ males should show smaller BRAIN VOLUME than controls
+summary(lm(BrainSegVolNotVent ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='male'),]
+t.test(temp$BrainSegVolNotVent~temp$FHR_str) # yes, signif t-test
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='female'),]
+t.test(temp$BrainSegVolNotVent~temp$FHR_str) # yes, NOT a signif t-test
+
+# FHR-SZ males should show smaller CORTICAL VOLUME than controls
+summary(lm(eTIV ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='male'),]
+t.test(temp$eTIV~temp$FHR_str) # yes, signif t-test
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='female'),]
+t.test(temp$eTIV~temp$FHR_str) # yes, NOT a signif t-test
+
+# FHR-SZ males should show smaller SURFACE AREA than controls
+summary(lm(WhiteSurfArea_area_global ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='male'),]
+t.test(temp$WhiteSurfArea_area_global~temp$FHR_str) # yes, signif t-test
+temp <- master_df_T1[(master_df_T1$FHR_str!='BP' & master_df_T1$sex_str=='female'),]
+t.test(temp$WhiteSurfArea_area_global~temp$FHR_str) # yes, NOT a signif t-test
+
+# FHR-BP females should show larger BRAIN VOLUME than controls
+summary(lm(BrainSegVolNotVent ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
+temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='male'),]
+t.test(temp$BrainSegVolNotVent~temp$FHR_str) # yes, NOT a signif t-test
+temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='female'),]
+t.test(temp$BrainSegVolNotVent~temp$FHR_str) # yes but barely (p=0.047), signif t-test; in the paper I think it was weak too
+
+# FHR-BP females should show larger CORTICAL VOLUME than controls
+summary(lm(eTIV ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
+temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='male'),]
+t.test(temp$eTIV~temp$FHR_str) # yes, NOT a signif t-test
+temp <- master_df_T1[(master_df_T1$FHR_str!='SZ' & master_df_T1$sex_str=='female'),]
+t.test(temp$eTIV~temp$FHR_str) # not really... a marginal effect (p=0.07); in the paper I think it was weak too
+
+# should be no evidence for interaction effects for cortical thickness
+summary(lm(MeanThickness_thickness_global ~ FHR_str*sex + age + site + mean_eulnum_cross, data=master_df_T1)) # yes, signif interaction
+# yep, same finding, VERY much not signif...
+
+# ==== visualizations ====
+
+colnames(master_df)
+ggplot(master_df, aes(x = time, y = eTIV, fill = FHR_str)) +
+  geom_violin(trim = FALSE, position = position_dodge(0.8)) +   
   scale_fill_brewer(palette = "Set3") +  
-  labs(x = "Time", y = "Value", fill = "Group") +   
+  labs(x = "Time", y = "eTIV", fill = "Group", color = "Group") +   
   theme_minimal()
 
 # ==== analysis 1 ====
@@ -360,6 +424,10 @@ summary(model)
 
 
 # ==== end
+
+
+
+
 
 
 
