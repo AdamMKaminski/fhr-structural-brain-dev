@@ -12,7 +12,7 @@ library(dplyr)
 
 # read in your list of subs, only keep keepers
 # this is to compare with data you read in, does it all match?
-setwd('/mnt/projects/VIA_longitudin/adam')
+setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
 sublist <- read_ods('sub_list.ods')
 sublist <- sublist[sublist$image_incl==1,]
 sublist <- sublist[sublist$qc_incl==1,]
@@ -27,7 +27,7 @@ rownames(sublist_base) <- NULL
 
 # get demo variables to control for
 # match to sublist_base
-setwd('/mnt/projects/VIA_longitudin/documents/database/')
+setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
 demos <- as.data.frame(read_xlsx('VIA11-15_longitudinal_demograph_clinic_wide.xlsx'))
 demos <- demos[demos$famlbnr %in% sublist_base$sub_id,]
 demos$sub_id <- demos$famlbnr
@@ -225,12 +225,13 @@ for(f in list.files(pattern='_base_')){
   }
 }
 
-# ==== FOR BASE, method 2: mixed age and site vars ==== 
+# ==== FOR BASE, method 2: mixed age and site vars - CORRECT ==== 
 
 # set directory for data
 setwd('/mnt/projects/VIA_longitudin/adam/data/ANALYSIS_CORTICAL/')
-# loop through files, initialize df to keep outliers
+# initialize df to keep outliers
 outlier_flags <- data.frame(sub_id = sublist_base$sub_id)
+# loop through files
 for(f in list.files(pattern='_base_')){
   # decide whether or not to read in file
   # if yes,
@@ -250,6 +251,8 @@ for(f in list.files(pattern='_base_')){
     readline(prompt = "press enter to continue")
     
     # and selected the columns to look at for outliers
+    # desired columns should be:
+    # 15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48
     selected_cols <- select_columns_console(measures_clean)
     print(selected_cols)
     
@@ -684,7 +687,7 @@ outlier_df_longi$highlight_4[outlier_df_longi$sub_id %in% c()] <- 1
 # ==== euler ====
 
 # read in euler data
-setwd('/mnt/projects/VIA_BIDS/BIDS_VIA11-15_derivatives/stat_tables/ANALYSIS_CORTICAL/')
+setwd('/mnt/projects/VIA_longitudin/adam/tasks/analysis_1/')
 fs_qa_dat <- read.csv('VIA11-15_fs741_long_qa_measures_restructured.csv')
 fs_qa_dat <- fs_qa_dat[fs_qa_dat$famlbnr %in% sublist$sub_id,]
 fs_qa_dat <- fs_qa_dat[order(fs_qa_dat$famlbnr),]
@@ -698,7 +701,7 @@ length(unique(fs_qa_dat$famlbnr))==length(unique(demos$famlbnr))
 
 euler_dat <- merge(fs_qa_dat, demos, by='famlbnr')
 
-subs_to_remove <- c(5,135,285,449)
+subs_to_remove <- c(5,135,285,449) # 449 was the only longitudinal outlier - only ses01 was bad; it's been removed
 euler_dat <- euler_dat[!(euler_dat$session_id == "ses01" & euler_dat$famlbnr %in% subs_to_remove),]
 
 # regress out age, site, and sex, as before
@@ -720,21 +723,32 @@ euler_dat <- euler_dat %>%
 euler_dat$sex <- as.factor(euler_dat$sex)
 euler_dat$mri_site <- as.factor(euler_dat$mri_site)
 
-# set up model
-model_eul <- lm(sub_ID ~ mri_age + mri_site + sex, data = euler_dat)
-# get residual
-euler_dat$eul_resid <- rstandard(model_eul)
-# get outliers -- THREE SDs, different than before
-cutoff <- function(data, x) {
-  mean(data, na.rm = TRUE) + c(-1, 1) * x * sd(data, na.rm = TRUE) }
-x <- 2
-low <- cutoff(euler_dat$eul_resid,x)[1]
-high <- cutoff(euler_dat$eul_resid,x)[2]
-euler_dat$eul_outs <- as.numeric(euler_dat$eul_resid < low | euler_dat$eul_resid > high)
-# look at the outliers (what's their euler number? ... what's their sub ID and ses #?)
-euler_dat$eul_num[euler_dat$eul_outs==1]
-euler_dat$sub_ID[euler_dat$eul_outs==1]
-euler_dat$time[euler_dat$eul_outs==1]
+# loop through time - find residuals for euler number separately by time
+for(t in c('ses01','ses02')){
+  print(paste('TIME = ',t,sep=''))
+  euler_dat_temp <- euler_dat[euler_dat$time==t,]
+  # set up model
+  model_eul <- lm(eul_num ~ mri_age + mri_site + sex, data = euler_dat_temp)
+  # get residual
+  euler_dat_temp$eul_resid <- rstandard(model_eul)
+  # get outliers -- THREE SDs, different than before
+  cutoff <- function(data, x) {
+    mean(data, na.rm = TRUE) + c(-1, 1) * x * sd(data, na.rm = TRUE) }
+  x <- 3 # x is number of SDs
+  low <- cutoff(euler_dat_temp$eul_resid,x)[1]
+  high <- cutoff(euler_dat_temp$eul_resid,x)[2]
+  euler_dat_temp$eul_outs <- as.numeric(euler_dat_temp$eul_resid < low | euler_dat_temp$eul_resid > high)
+  # look at the outliers (what's their euler number? ... what's their sub ID and ses #?)
+  print(euler_dat_temp$eul_num[euler_dat_temp$eul_outs==1])
+  print(euler_dat_temp$sub_ID[euler_dat_temp$eul_outs==1])
+  print(euler_dat_temp$time[euler_dat_temp$eul_outs==1])
+}
+
+
+
+
+
+
 
 
 
